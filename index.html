@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oasis MVP</title>
+<style>
+body{
+margin:0;
+font-family:Arial,sans-serif;
+background:#1d2b1f;
+color:white;
+display:flex;
+flex-direction:column;
+height:100vh;
+}
+header{
+padding:14px;
+background:#253628;
+}
+header h1{
+margin:0;
+font-size:22px;
+}
+header p{
+margin-top:4px;
+opacity:0.8;
+font-size:13px;
+}
+.canvas-container{
+flex:1;
+background:#f4efe6;
+position:relative;
+}
+canvas{
+display:block;
+width:100%;
+height:100%;
+touch-action:none;
+}
+.toolbar{
+display:flex;
+flex-wrap:wrap;
+gap:10px;
+padding:12px;
+background:#253628;
+justify-content:center;
+}
+button{
+padding:10px 14px;
+border:none;
+border-radius:12px;
+background:#334a36;
+color:white;
+cursor:pointer;
+}
+button.active{
+background:#9dc08b;
+color:#1d2b1f;
+}
+.color{
+width:28px;
+height:28px;
+border-radius:50%;
+border:2px solid white;
+cursor:pointer;
+}
+.toast{
+position:absolute;
+bottom:20px;
+left:50%;
+transform:translateX(-50%);
+background:rgba(0,0,0,0.7);
+padding:10px 16px;
+border-radius:12px;
+opacity:0;
+transition:0.3s;
+}
+.toast.show{
+opacity:1;
+}
+</style>
+</head>
+<body>
+
+<header>
+<h1>🌿 Oasis</h1>
+<p>Минималистичное пространство для творчества и концентрации</p>
+</header>
+
+<div class="canvas-container">
+<canvas id="canvas"></canvas>
+<div class="toast" id="toast"></div>
+</div>
+
+<div class="toolbar">
+<button class="brush active" data-brush="pencil">✏️ Карандаш</button>
+<button class="brush" data-brush="marker">🖍 Маркер</button>
+<button class="brush" data-brush="soft">🖌 Кисть</button>
+<button id="eraser">🧹 Ластик</button>
+
+<input type="range" id="size" min="1" max="40" value="4">
+
+<div class="color" data-color="#2d3a1f" style="background:#2d3a1f"></div>
+<div class="color" data-color="#556b2f" style="background:#556b2f"></div>
+<div class="color" data-color="#7f8c6b" style="background:#7f8c6b"></div>
+<div class="color" data-color="#c5c9a4" style="background:#c5c9a4"></div>
+
+<button id="soundBtn">🔊 Звук</button>
+<button id="clearBtn">🗑 Очистить</button>
+</div>
+
+<script>
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let drawing = false;
+let brush = 'pencil';
+let color = '#2d3a1f';
+let size = 4;
+let eraser = false;
+let soundEnabled = true;
+let audioCtx = null;
+
+const tasks = [
+'Нарисуй своё безопасное место',
+'Нарисуй дождь',
+'Изобрази своё настроение',
+'Создай абстракцию из линий',
+'Нарисуй лес ночью'
+];
+
+function resizeCanvas(){
+
+const dpr = window.devicePixelRatio || 1;
+
+canvas.width = canvas.offsetWidth * dpr;
+canvas.height = canvas.offsetHeight * dpr;
+
+ctx.scale(dpr,dpr);
+
+ctx.fillStyle = '#f4efe6';
+ctx.fillRect(0,0,canvas.offsetWidth,canvas.offsetHeight);
+
+applyStyle();
+}
+
+resizeCanvas();
+
+window.addEventListener('resize', resizeCanvas);
+
+function applyStyle(){
+
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
+
+if(eraser){
+
+ctx.strokeStyle = '#f4efe6';
+ctx.lineWidth = size * 3;
+ctx.globalAlpha = 1;
+return;
+}
+
+ctx.strokeStyle = color;
+
+if(brush === 'pencil'){
+ctx.lineWidth = size;
+ctx.globalAlpha = 0.9;
+}
+
+if(brush === 'marker'){
+ctx.lineWidth = size * 2;
+ctx.globalAlpha = 0.35;
+}
+
+if(brush === 'soft'){
+ctx.lineWidth = size * 4;
+ctx.globalAlpha = 0.15;
+}
+}
+
+function getPos(e){
+
+const rect = canvas.getBoundingClientRect();
+
+return{
+x:(e.touches ? e.touches[0].clientX : e.clientX) - rect.left,
+y:(e.touches ? e.touches[0].clientY : e.clientY) - rect.top
+};
+}
+
+function start(e){
+
+drawing = true;
+
+const p = getPos(e);
+
+ctx.beginPath();
+ctx.moveTo(p.x,p.y);
+
+playSound();
+}
+
+function draw(e){
+
+if(!drawing) return;
+
+const p = getPos(e);
+
+ctx.lineTo(p.x,p.y);
+ctx.stroke();
+}
+
+function stop(){
+
+drawing = false;
+ctx.closePath();
+}
+
+canvas.addEventListener('mousedown',start);
+canvas.addEventListener('mousemove',draw);
+canvas.addEventListener('mouseup',stop);
+canvas.addEventListener('mouseleave',stop);
+
+canvas.addEventListener('touchstart',start);
+canvas.addEventListener('touchmove',draw);
+canvas.addEventListener('touchend',stop);
+
+function initAudio(){
+
+if(!audioCtx){
+audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+}
+}
+
+function playSound(){
+
+if(!soundEnabled) return;
+
+initAudio();
+
+const now = audioCtx.currentTime;
+
+const bufferSize = audioCtx.sampleRate * 0.08;
+
+const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+
+const data = buffer.getChannelData(0);
+
+for(let i=0;i<bufferSize;i++){
+
+data[i] = (Math.random()*2-1) * Math.exp(-i/2500) * 0.08;
+}
+
+const noise = audioCtx.createBufferSource();
+noise.buffer = buffer;
+
+const filter = audioCtx.createBiquadFilter();
+filter.type = 'lowpass';
+filter.frequency.value = 900;
+
+const gain = audioCtx.createGain();
+
+gain.gain.setValueAtTime(0.03, now);
+gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+
+noise.connect(filter);
+filter.connect(gain);
+gain.connect(audioCtx.destination);
+
+noise.start(now);
+noise.stop(now + 0.12);
+}
+
+document.querySelectorAll('.brush').forEach(btn=>{
+
+btn.addEventListener('click',()=>{
+
+eraser = false;
+brush = btn.dataset.brush;
+
+document.querySelectorAll('.brush').forEach(x=>x.classList.remove('active'));
+
+btn.classList.add('active');
+
+applyStyle();
+});
+});
+
+document.getElementById('eraser').addEventListener('click',()=>{
+
+eraser = true;
+applyStyle();
+});
+
+document.querySelectorAll('.color').forEach(c=>{
+
+c.addEventListener('click',()=>{
+
+color = c.dataset.color;
+eraser = false;
+
+applyStyle();
+});
+});
+
+document.getElementById('size').addEventListener('input',(e)=>{
+
+size = e.target.value;
+applyStyle();
+});
+
+document.getElementById('soundBtn').addEventListener('click',()=>{
+
+soundEnabled = !soundEnabled;
+
+document.getElementById('soundBtn').textContent =
+soundEnabled ? '🔊 Звук' : '🔇 Без звука';
+});
+
+document.getElementById('clearBtn').addEventListener('click',()=>{
+
+ctx.fillStyle = '#f4efe6';
+ctx.fillRect(0,0,canvas.offsetWidth,canvas.offsetHeight);
+
+showToast('Холст очищен 🌿');
+});
+
+function showToast(text){
+
+const toast = document.getElementById('toast');
+
+toast.textContent = text;
+
+toast.classList.add('show');
+
+setTimeout(()=>{
+toast.classList.remove('show');
+},4000);
+}
+
+setInterval(()=>{
+
+const task = tasks[Math.floor(Math.random()*tasks.length)];
+
+showToast(task);
+
+},45000);
+
+</script>
+
+</body>
+</html>
